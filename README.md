@@ -1,4 +1,4 @@
-# TS Exercise 9: The Box–Jenkins Model (ARIMA)
+# TS Exercise 8: Modelling and Forecasting with ARMA Processes
 
 ## Name: Boopathy S
 
@@ -8,211 +8,118 @@
 
 ## AIM
 
-To understand and implement the Box-Jenkins approach to time-series forecasting using an ARIMA model in Python.
+To model and forecast a time series using an ARMA(p,q) process.
 
 ## PROGRAM
 
 ### Python Code
 
 ```python
-import warnings
-warnings.filterwarnings("ignore")
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from statsmodels.tsa.arima_process import ArmaProcess
 from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
-from statsmodels.stats.diagnostic import acorr_ljungbox
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-# Sales data
-sales = [
-    100, 105, 103, 110, 115, 112, 120, 125,
-    123, 130, 135, 132, 140, 145, 143, 150,
-    155, 152, 160, 165, 163, 170, 175, 172
-]
+# Set random seed
+np.random.seed(42)
 
-data = pd.Series(sales, name="Sales")
+# Define AR and MA parameters
+ar = np.array([1, -0.5, -0.2])
+ma = np.array([1, 0.4])
 
-print("STEP 1: Original Sales Data")
-print(data.to_string(index=False))
+# Generate ARMA(2,1) time series
+arma_process = ArmaProcess(ar, ma)
+data = arma_process.generate_sample(nsample=200)
+series = pd.Series(data)
 
-# Plot original sales data
+# Plot simulated time series
 plt.figure(figsize=(10, 4))
-plt.plot(data, marker="o")
-plt.title("Monthly Sales Data")
-plt.xlabel("Month")
-plt.ylabel("Sales")
-plt.grid(True)
-plt.tight_layout()
+plt.plot(series)
+plt.title("Simulated ARMA(2,1) Time Series")
+plt.xlabel("Time")
+plt.ylabel("Value")
 plt.show()
 
-# ADF test on original data
-adf_result = adfuller(data)
+# Plot ACF and PACF
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 
-print("\nSTEP 2: ADF Test on Original Data")
-print("ADF Statistic:", round(adf_result[0], 4))
-print("p-value:", round(adf_result[1], 4))
+plot_acf(series, lags=20, ax=ax[0])
+plot_pacf(series, lags=20, ax=ax[1])
 
-if adf_result[1] < 0.05:
-    print("Conclusion: Evidence of stationarity.")
-else:
-    print("Conclusion: Insufficient evidence of stationarity.")
-
-# First differencing
-diff_data = data.diff().dropna()
-
-print("\nSTEP 3: First-Differenced Data")
-print(diff_data.to_string(index=False))
-
-# Plot differenced data
-plt.figure(figsize=(10, 4))
-plt.plot(diff_data, marker="o")
-plt.title("First-Differenced Sales")
-plt.xlabel("Month")
-plt.ylabel("Change in Sales")
-plt.grid(True)
-plt.tight_layout()
 plt.show()
 
-# ADF test after differencing
-adf_diff = adfuller(diff_data)
+# Split data into training and testing sets
+train_size = int(len(series) * 0.8)
+train = series[:train_size]
+test = series[train_size:]
 
-print("\nSTEP 4: ADF Test After Differencing")
-print("ADF Statistic:", round(adf_diff[0], 4))
-print("p-value:", round(adf_diff[1], 4))
+print("Training observations:", len(train))
+print("Testing observations:", len(test))
 
-if adf_diff[1] < 0.05:
-    print("Conclusion: Evidence of stationarity.")
-else:
-    print("Conclusion: Stationarity is not confirmed.")
+# Fit AR(1) model
+model_ar1 = ARIMA(train, order=(1, 0, 0))
+fit_ar1 = model_ar1.fit()
 
-# ACF and PACF plots
-print("\nSTEP 5: ACF and PACF Plots")
+# Fit MA(1) model
+model_ma1 = ARIMA(train, order=(0, 0, 1))
+fit_ma1 = model_ma1.fit()
 
-plot_acf(diff_data, lags=10)
-plt.tight_layout()
-plt.show()
+# Fit ARMA(1,1) model
+model_arma11 = ARIMA(train, order=(1, 0, 1))
+fit_arma11 = model_arma11.fit()
 
-plot_pacf(diff_data, lags=10, method="ywm")
-plt.tight_layout()
-plt.show()
+# Fit ARMA(2,1) model
+model_arma21 = ARIMA(train, order=(2, 0, 1))
+fit_arma21 = model_arma21.fit()
 
-# Fit ARIMA(1,1,1) model
-model = ARIMA(data, order=(1, 1, 1))
-fitted_model = model.fit()
+# Compare model information criteria
+print("\n--- Model Information Criteria Comparison ---")
 
-print("\nSTEP 6: ARIMA Model Summary")
-print(fitted_model.summary())
+print(f"AR(1)    | AIC: {fit_ar1.aic:.2f} | BIC: {fit_ar1.bic:.2f}")
+print(f"MA(1)    | AIC: {fit_ma1.aic:.2f} | BIC: {fit_ma1.bic:.2f}")
+print(f"ARMA(1,1)| AIC: {fit_arma11.aic:.2f} | BIC: {fit_arma11.bic:.2f}")
+print(f"ARMA(2,1)| AIC: {fit_arma21.aic:.2f} | BIC: {fit_arma21.bic:.2f}")
 
-# Model selection criteria
-print("\nSTEP 7: Model Selection Criteria")
-print("AIC:", round(fitted_model.aic, 4))
-print("BIC:", round(fitted_model.bic, 4))
+# Forecast test data
+forecast = fit_arma21.forecast(steps=len(test))
 
-# Residual analysis
-residuals = fitted_model.resid
+# Calculate forecast error metrics
+mae = mean_absolute_error(test, forecast)
+mse = mean_squared_error(test, forecast)
+rmse = np.sqrt(mse)
 
-plt.figure(figsize=(10, 4))
-plt.plot(residuals, marker="o")
-plt.axhline(0, color="red", linestyle="--")
-plt.title("ARIMA Residuals")
-plt.xlabel("Month")
-plt.ylabel("Residual")
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+print("\n--- Forecast Error Metrics for ARMA(2,1) ---")
+print("Mean Absolute Error (MAE):", round(mae, 4))
+print("Mean Squared Error (MSE):", round(mse, 4))
+print("Root Mean Squared Error (RMSE):", round(rmse, 4))
 
-# Residual ACF
-print("\nSTEP 8: Residual ACF")
-plot_acf(residuals, lags=10)
-plt.tight_layout()
-plt.show()
+# Plot actual and forecasted values
+plt.figure(figsize=(12, 5))
 
-# Ljung-Box test
-lb_result = acorr_ljungbox(
-    residuals,
-    lags=[5],
-    return_df=True
-)
-
-print("\nLjung-Box Test Result")
-print(lb_result)
-
-if lb_result["lb_pvalue"].iloc[0] > 0.05:
-    print("No significant residual autocorrelation detected at lag 5.")
-else:
-    print("Residual autocorrelation may remain; review the model.")
-
-# Forecast next six months
-forecast = fitted_model.get_forecast(steps=6)
-
-forecast_mean = forecast.predicted_mean
-forecast_ci = forecast.conf_int()
-
-print("\nSTEP 9: Forecast for the Next Six Months")
-
-for month, value in enumerate(
-    forecast_mean,
-    start=len(data) + 1
-):
-    print(f"Month {month}: {value:.2f}")
-
-print("\nForecast Confidence Intervals")
-print(forecast_ci.round(2))
-
-# Plot forecast with confidence intervals
-future_months = range(len(data), len(data) + 6)
-
-plt.figure(figsize=(10, 5))
-
+plt.plot(train, label="Training Data")
+plt.plot(test, label="Actual Test Data")
 plt.plot(
-    range(len(data)),
-    data,
-    marker="o",
-    label="Actual Sales"
+    test.index,
+    forecast,
+    label="ARMA(2,1) Forecast",
+    color="red"
 )
 
-plt.plot(
-    future_months,
-    forecast_mean.to_numpy(),
-    marker="o",
-    linestyle="--",
-    label="Forecast"
-)
-
-plt.fill_between(
-    future_months,
-    forecast_ci.iloc[:, 0].to_numpy(),
-    forecast_ci.iloc[:, 1].to_numpy(),
-    alpha=0.2,
-    label="95% Confidence Interval"
-)
-
-plt.title("Box-Jenkins ARIMA: Six-Month Sales Forecast")
-plt.xlabel("Month")
-plt.ylabel("Sales")
+plt.title("ARMA(2,1) Forecast vs Actual Data")
+plt.xlabel("Time")
+plt.ylabel("Value")
 plt.legend()
-plt.grid(True)
-plt.tight_layout()
 plt.show()
-
-# Final result
-print("\nRESULT")
-print("Box-Jenkins ARIMA modelling completed successfully.")
 ```
 
 ## OUTPUT
-<img width="769" height="331" alt="image" src="https://github.com/user-attachments/assets/e6126919-64cb-44cf-96d9-4955e0a8d6ca" />
-<img width="790" height="646" alt="image" src="https://github.com/user-attachments/assets/d883c08f-33ec-47bb-8054-7ac7af3f366c" />
-<img width="790" height="1001" alt="image" src="https://github.com/user-attachments/assets/fc73d1c2-8558-49c5-8e14-f2c9bbed3d73" />
-<img width="940" height="371" alt="image" src="https://github.com/user-attachments/assets/3c94d688-3b4e-4599-8994-84817800f71f" />
-<img width="940" height="700" alt="image" src="https://github.com/user-attachments/assets/f46df326-0217-4691-844f-8e592c80ede4" />
-<img width="940" height="700" alt="image" src="https://github.com/user-attachments/assets/8f3d6604-b349-42d0-bd4c-b4ac3602a5d2" />
-<img width="909" height="420" alt="image" src="https://github.com/user-attachments/assets/02e2fad0-687e-4771-aa3c-92157baedc0e" />
+<img width="940" height="365" alt="image" src="https://github.com/user-attachments/assets/4b6050c5-4f68-46f8-ab67-c172024d7be2" />
+<img width="940" height="680" alt="image" src="https://github.com/user-attachments/assets/5bbe7fd5-ad94-45a1-a897-c8776ea03596" />
+<img width="940" height="1114" alt="image" src="https://github.com/user-attachments/assets/2c891966-0cf5-48b2-915f-66ab277fac3f" />
 
 ## RESULT
-
-The Box–Jenkins approach was successfully implemented using an ARIMA model in Python to analyze time-series data and forecast future values.
+Thus, the ARMA(2,1) model was successfully implemented using Python. The time series was modelled, forecast values were generated, and model performance was evaluated using MAE, MSE, and RMSE.
